@@ -1,0 +1,102 @@
+# Python identique à l’entraînement
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+# dépendances système utiles (libgomp pour lightgbm / numpy, curl pour /health checks)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl build-essential gcc && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Pinned deps = celles vues dans les logs MLflow
+# (tu peux aussi mettre ça dans app/requirements.txt)
+RUN python -m pip install --upgrade pip==25.2 && \
+    pip install \
+      fastapi==0.115.2 uvicorn[standard]==0.35.0 \
+      mlflow==2.11.1 \
+      scikit-learn==1.7.1 \
+      scipy==1.16.1 \
+      pyarrow==15.0.2 \
+      matplotlib==3.10.6 \
+      cffi==1.17.1 \
+      pandas==2.3.2 \
+      lightgbm==4.6.0 \
+      requests==2.32.5 \
+      python-dotenv==1.1.1
+
+# code API
+COPY app/ /app/
+
+# expose et démarrage
+EXPOSE 8000
+CMD ["uvicorn", "api_aqi_model:app", "--host", "0.0.0.0", "--port", "8000"]
+
+
+
+
+
+
+
+
+# FROM python:3.9-slim
+
+# # Lib système pour LightGBM / numpy (OpenBLAS, OpenMP)
+# RUN apt-get update && \
+#     apt-get install -y --no-install-recommends libgomp1 && \
+#     rm -rf /var/lib/apt/lists/*
+
+# WORKDIR /app
+
+# COPY app/requirements.txt .
+
+# # ➊ ‑ pré‑téléchargement des wheels rapides
+# RUN pip install --no-cache-dir --prefer-binary -r requirements.txt
+
+# # ➋ ‑ ensuite seulement, copie du code
+# COPY app/ .
+
+# EXPOSE 8000
+# CMD ["uvicorn", "api_aqi_model:app", "--host", "0.0.0.0", "--port", "8000"]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# # # on reste en Python 3.9 pour rester cohérent avec Airflow,
+# # # mais vous pourriez passer en 3.11 si vous préférez
+# # FROM python:3.9-slim
+
+# # # Empêche l’écriture de .pyc et accélère légèrement le démarrage
+# # ENV PYTHONDONTWRITEBYTECODE=1 \
+# #     PYTHONUNBUFFERED=1 \
+# #     PYTHONPATH=/opt/project 
+
+# # WORKDIR /app
+
+# # # requirements séparés pour le service API
+# # COPY app/requirements.txt ./requirements.txt
+# # RUN pip install --no-cache-dir -r requirements.txt
+
+# # # Librairie métier commune
+# # COPY scripts/ /opt/project/scripts
+
+# # # code de l’API
+# # COPY app/ .
+
+# # # lancement du serveur
+# # CMD ["uvicorn", "app.predict_service.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

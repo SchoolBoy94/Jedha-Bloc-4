@@ -1,0 +1,403 @@
+pipeline {
+  agent any
+
+  environment {
+    WORKSPACE_DIR = '/var/jenkins_home/workspace'
+    VENV_DIR      = '.venv'
+    PYTHONPATH    = "${WORKSPACE_DIR}/scripts:${WORKSPACE_DIR}/tests"
+    ENV_FILE      = "${WORKSPACE_DIR}/tests/.env_test"   // ENV de test
+  }
+
+  stages {
+      
+    stage('Setup Python venv') {
+      steps {
+        echo '🔧 Création de l’environnement virtuel Python...'
+        sh '''
+          python3 -m venv "${VENV_DIR}"
+          . "${VENV_DIR}/bin/activate"
+          python -V
+          pip install --upgrade pip
+          pip install -r "${WORKSPACE_DIR}/requirements_test.txt"
+        '''
+        echo '✅ Environnement virtuel prêt et dépendances installées.'
+      }
+    
+      post {
+        success { echo "✅ Setup réussi : environnement Python prêt." }
+        failure { echo "❌ Échec du setup : requirements introuvables ou pip a échoué." }
+      }
+    }
+    
+    stage('1) test_create_tables_integration') {
+      steps {
+        sh '''
+          set -e
+            . "${VENV_DIR}/bin/activate"
+            export ENV_FILE="${ENV_FILE}"
+            cd ${WORKSPACE_DIR}
+          pytest -m integration -vv tests/test_create_tables_integration.py
+        '''
+      }
+      post {
+        success { echo "✅ OK: test_create_tables_integration" }
+        failure { echo "❌ KO: test_create_tables_integration" }
+      }
+    }
+
+
+
+
+
+    stage('2) test_create_kafka_topics_integration') {
+      steps {
+        sh '''
+          set -e
+            . "${VENV_DIR}/bin/activate"
+            export ENV_FILE="${ENV_FILE}"
+            cd ${WORKSPACE_DIR}
+          pytest -m integration -vv tests/test_create_kafka_topics_integration.py
+        '''
+      }
+      post {
+        success { echo "✅ OK: test_create_kafka_topics_integration" }
+        failure { echo "❌ KO: test_create_kafka_topics_integration" }
+      }
+    }
+    
+    
+    stage('3) test_load_aqi_csv_to_table_raw_integration') {
+      steps {
+        sh '''
+          set -e
+            . "${VENV_DIR}/bin/activate"
+            export ENV_FILE="${ENV_FILE}"
+            cd ${WORKSPACE_DIR} ..
+          pytest -m integration -vv tests/test_load_aqi_csv_to_table_raw_integration.py
+        '''
+      }
+      post {
+        success { echo "✅ OK: test_load_aqi_csv_to_table_raw_integration" }
+        failure { echo "❌ KO: test_load_aqi_csv_to_table_raw_integration" }
+      }
+    }
+    stage('4) test_load_aqi_csv_to_table_transform_integration') {
+      steps {
+        sh '''
+          set -e
+            . "${VENV_DIR}/bin/activate"
+            export ENV_FILE="${ENV_FILE}"
+            cd ${WORKSPACE_DIR}
+          pytest -m integration -vv tests/test_load_aqi_csv_to_table_transform_integration.py
+        '''
+      }
+      post {
+        success { echo "✅ OK: test_load_aqi_csv_to_table_transform_integration" }
+        failure { echo "❌ KO: test_load_aqi_csv_to_table_transform_integration" }
+      }
+    }
+    
+    
+    // stage('5) test_current_aqi_to_kafka_integration') {
+    //   steps {
+    //     sh '''
+    //       set -e
+    //         . "${VENV_DIR}/bin/activate"
+    //         export ENV_FILE="${ENV_FILE}"
+    //         cd ${WORKSPACE_DIR}
+    //       pytest -m integration -vv tests/test_current_aqi_to_kafka_integration.py
+    //     '''
+    //   }
+    //   post {
+    //     success { echo "✅ OK: test_current_aqi_to_kafka_integration" }
+    //     failure { echo "❌ KO: test_current_aqi_to_kafka_integration" }
+    //   }
+    // }
+    
+    
+    stage('6) test_insert_in_table_raw_integration') {
+      steps {
+        sh '''
+          set -e
+            . "${VENV_DIR}/bin/activate"
+            export ENV_FILE="${ENV_FILE}"
+            cd ${WORKSPACE_DIR}
+          pytest -m integration -vv tests/test_insert_in_table_raw_integration.py
+        '''
+      }
+      post {
+        success { echo "✅ OK: test_insert_in_table_raw_integration" }
+        failure { echo "❌ KO: test_insert_in_table_raw_integration" }
+      }
+    }
+    
+    
+    stage('7) test_insert_in_table_transform_integration') {
+      steps {
+        sh '''
+          set -e
+            . "${VENV_DIR}/bin/activate"
+            export ENV_FILE="${ENV_FILE}"
+            cd ${WORKSPACE_DIR}
+          pytest -m integration -vv tests/test_insert_in_table_transform_integration.py
+        '''
+      }
+      post {
+        success { echo "✅ OK: test_insert_in_table_transform_integration" }
+        failure { echo "❌ KO: test_insert_in_table_transform_integration" }
+      }
+    }
+    
+    
+    stage('8) test_transform_aqi_kafka_to_kafka_integration') {
+      steps {
+        sh '''
+          set -e
+            . "${VENV_DIR}/bin/activate"
+            export ENV_FILE="${ENV_FILE}"
+            cd ${WORKSPACE_DIR}
+          pytest -m integration -vv tests/test_transform_aqi_kafka_to_kafka_integration.py
+        '''
+      }
+      post {
+        success { echo "✅ OK: test_transform_aqi_kafka_to_kafka_integration" }
+        failure { echo "❌ KO: test_transform_aqi_kafka_to_kafka_integration" }
+      }
+    }
+    
+    
+    stage('9) test_transform_data_quality_integration') {
+      steps {
+        sh '''
+          set -e
+            . "${VENV_DIR}/bin/activate"
+            export ENV_FILE="${ENV_FILE}"
+            cd ${WORKSPACE_DIR}
+          pytest -m integration -vv tests/test_transform_data_quality_integration.py
+        '''
+      }
+      post {
+        success { echo "✅ OK: test_transform_data_quality_integration" }
+        failure { echo "❌ KO: test_transform_data_quality_integration" }
+      }
+    }
+    
+    
+  }
+  post {
+    success { echo "🏁 Pipeline réussi : tous les tests d’intégration sont passés." }
+    failure { echo "💥 Pipeline en échec : au moins un test d’intégration a échoué." }
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+
+---   Fonction bien celui en bas  ----
+
+
+
+pipeline {
+  agent any
+
+  environment {
+    WORKSPACE_DIR = '/var/jenkins_home/workspace'
+    VENV_DIR      = '.venv'
+    PYTHONPATH    = "${WORKSPACE_DIR}/scripts:${WORKSPACE_DIR}/tests"
+    ENV_FILE      = "${WORKSPACE_DIR}/tests/.env_test"   // ENV de test
+  }
+
+  stages {
+    
+    stage('Setup Python venv') {
+      steps {
+        echo '🔧 Création de l’environnement virtuel Python...'
+        sh '''
+          python3 -m venv "${VENV_DIR}"
+          . "${VENV_DIR}/bin/activate"
+          python -V
+          pip install --upgrade pip
+          pip install -r "${WORKSPACE_DIR}/requirements_test.txt"
+        '''
+        echo '✅ Environnement virtuel prêt et dépendances installées.'
+      }
+    
+      post {
+        success { echo "✅ Setup réussi : environnement Python prêt." }
+        failure { echo "❌ Échec du setup : requirements introuvables ou pip a échoué." }
+      }
+    }
+
+    stage('5) test_current_aqi_to_kafka_integration') {
+      steps {
+        sh '''
+          set -e
+            . "${VENV_DIR}/bin/activate"
+            export ENV_FILE="${ENV_FILE}"
+            cd ${WORKSPACE_DIR}
+          pytest -m integration -vv tests/test_current_aqi_to_kafka_integration.py
+        '''
+      }
+      post {
+        success { echo "✅ OK: test_current_aqi_to_kafka_integration" }
+        failure { echo "❌ KO: test_current_aqi_to_kafka_integration" }
+      }
+    }
+
+
+stage('1) test_create_tables_integration') {
+      steps {
+        sh '''
+          set -e
+            . "${VENV_DIR}/bin/activate"
+            export ENV_FILE="${ENV_FILE}"
+            cd ${WORKSPACE_DIR}
+          pytest -m integration -vv tests/test_create_tables_integration.py
+        '''
+      }
+      post {
+        success { echo "✅ OK: test_create_tables_integration" }
+        failure { echo "❌ KO: test_create_tables_integration" }
+      }
+    }
+
+
+
+
+
+    stage('2) test_create_kafka_topics_integration') {
+      steps {
+        sh '''
+          set -e
+            . "${VENV_DIR}/bin/activate"
+            export ENV_FILE="${ENV_FILE}"
+            cd ${WORKSPACE_DIR}
+          pytest -m integration -vv tests/test_create_kafka_topics_integration.py
+        '''
+      }
+      post {
+        success { echo "✅ OK: test_create_kafka_topics_integration" }
+        failure { echo "❌ KO: test_create_kafka_topics_integration" }
+      }
+    }
+    
+    
+    stage('3) test_load_aqi_csv_to_table_raw_integration') {
+      steps {
+        sh '''
+          set -e
+            . "${VENV_DIR}/bin/activate"
+            export ENV_FILE="${ENV_FILE}"
+            cd ${WORKSPACE_DIR} ..
+          pytest -m integration -vv tests/test_load_aqi_csv_to_table_raw_integration.py
+        '''
+      }
+      post {
+        success { echo "✅ OK: test_load_aqi_csv_to_table_raw_integration" }
+        failure { echo "❌ KO: test_load_aqi_csv_to_table_raw_integration" }
+      }
+    }
+    stage('4) test_load_aqi_csv_to_table_transform_integration') {
+      steps {
+        sh '''
+          set -e
+            . "${VENV_DIR}/bin/activate"
+            export ENV_FILE="${ENV_FILE}"
+            cd ${WORKSPACE_DIR}
+          pytest -m integration -vv tests/test_load_aqi_csv_to_table_transform_integration.py
+        '''
+      }
+      post {
+        success { echo "✅ OK: test_load_aqi_csv_to_table_transform_integration" }
+        failure { echo "❌ KO: test_load_aqi_csv_to_table_transform_integration" }
+      }
+    }
+    
+    
+    stage('6) test_insert_in_table_raw_integration') {
+      steps {
+        sh '''
+          set -e
+            . "${VENV_DIR}/bin/activate"
+            export ENV_FILE="${ENV_FILE}"
+            cd ${WORKSPACE_DIR}
+          pytest -m integration -vv tests/test_insert_in_table_raw_integration.py
+        '''
+      }
+      post {
+        success { echo "✅ OK: test_insert_in_table_raw_integration" }
+        failure { echo "❌ KO: test_insert_in_table_raw_integration" }
+      }
+    }
+    
+    
+    stage('7) test_insert_in_table_transform_integration') {
+      steps {
+        sh '''
+          set -e
+            . "${VENV_DIR}/bin/activate"
+            export ENV_FILE="${ENV_FILE}"
+            cd ${WORKSPACE_DIR}
+          pytest -m integration -vv tests/test_insert_in_table_transform_integration.py
+        '''
+      }
+      post {
+        success { echo "✅ OK: test_insert_in_table_transform_integration" }
+        failure { echo "❌ KO: test_insert_in_table_transform_integration" }
+      }
+    }
+    
+    
+    stage('8) test_transform_aqi_kafka_to_kafka_integration') {
+      steps {
+        sh '''
+          set -e
+            . "${VENV_DIR}/bin/activate"
+            export ENV_FILE="${ENV_FILE}"
+            cd ${WORKSPACE_DIR}
+          pytest -m integration -vv tests/test_transform_aqi_kafka_to_kafka_integration.py
+        '''
+      }
+      post {
+        success { echo "✅ OK: test_transform_aqi_kafka_to_kafka_integration" }
+        failure { echo "❌ KO: test_transform_aqi_kafka_to_kafka_integration" }
+      }
+    }
+    
+    
+    stage('9) test_transform_data_quality_integration') {
+      steps {
+        sh '''
+          set -e
+            . "${VENV_DIR}/bin/activate"
+            export ENV_FILE="${ENV_FILE}"
+            cd ${WORKSPACE_DIR}
+          pytest -m integration -vv tests/test_transform_data_quality_integration.py
+        '''
+      }
+      post {
+        success { echo "✅ OK: test_transform_data_quality_integration" }
+        failure { echo "❌ KO: test_transform_data_quality_integration" }
+      }
+    }
+
+
+
+  }
+  post {
+    success { echo "🏁 Pipeline réussi : tests sélectionnés passés." }
+    failure { echo "💥 Pipeline en échec : au moins un test a échoué." }
+  }
+}

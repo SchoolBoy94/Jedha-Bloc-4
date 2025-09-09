@@ -1,0 +1,17 @@
+# ─── API & Serveur ────────────────────────────────────────────────
+fastapi~=0.111            # dernière stable
+uvicorn[standard]~=0.30   # serveur ASGI
+pydantic~=2.7             # FastAPI 0.111 requiert v2
+
+# ─── Inférence du modèle AQI ──────────────────────────────────────
+lightgbm~=4.3             # charger le booster
+scikit-learn~=1.4         # pré‑processing
+numpy~=1.26               # dépendance commune
+pandas~=2.2               # features tabulaires
+scipy~=1.12               # nécessaire à scikit‑learn
+
+# ─── Trackers & utils ─────────────────────────────────────────────
+mlflow-skinny==2.11.1     # client léger (pas de serveur)
+psycopg2-binary           # <‑ si l’API lit Postgres
+python-dotenv             # charger .env en local
+

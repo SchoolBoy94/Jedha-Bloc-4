@@ -1,0 +1,109 @@
+pipeline {
+  agent any
+
+   triggers {
+    cron('0 0 1 * *')
+  }
+
+  environment {
+    WORKSPACE_DIR = '/var/jenkins_home/workspace'
+    VENV_DIR      = '.venv'
+    VENV_PATH     = "${WORKSPACE_DIR}/${VENV_DIR}"
+    PYTHONPATH    = "${WORKSPACE_DIR}"
+    ENV_FILE      = "${WORKSPACE_DIR}/.env"
+
+    // IMPORTANT : cible le bind-mount côté host (./evidently_workspace)
+    EVIDENTLY_WORKSPACE_PATH = '/var/jenkins_home/workspace/evidently_workspace'
+  }
+
+  stages {
+
+    stage('Setup venv & deps') {
+      steps {
+        echo "🔧 Préparation de l’environnement Python"
+        sh '''set -e
+python3 -V || true
+mkdir -p "${EVIDENTLY_WORKSPACE_PATH}"
+
+# Crée le venv s'il n'existe pas
+if [ ! -d "${VENV_PATH}" ]; then
+  python3 -m venv "${VENV_PATH}"
+fi
+
+. "${VENV_PATH}/bin/activate"
+python -m pip install --upgrade pip
+# requirements_test.txt est monté dans le workspace
+pip install -r "${WORKSPACE_DIR}/requirements_test.txt"
+
+echo "➡  Python: $(python -V)"
+echo "➡  Pip:    $(pip -V)"
+echo "➡  PYTHONPATH=${PYTHONPATH}"
+echo "➡  ENV_FILE=${ENV_FILE}"
+echo "➡  EVIDENTLY_WORKSPACE_PATH=${EVIDENTLY_WORKSPACE_PATH}"
+'''
+      }
+    }
+
+    stage('Check Installed Packages') {
+      steps {
+        echo "📦 Vérification des libs"
+        sh '''set -e
+. "${VENV_PATH}/bin/activate"
+python -m pip show evidently || echo "❌ evidently non trouvé"
+python -m pip list | grep -E 'mlflow|evidently|pandas|scikit-learn' || true
+'''
+      }
+      post {
+        success { echo "✅ OK: Evidently Found Success" }
+        failure { echo "❌ KO: Evidently Not Found Echec" }
+      }
+    }
+
+    stage('Log env vu par Python') {
+      steps {
+        sh '''
+. "${VENV_PATH}/bin/activate"
+python - <<'PY'
+import os, pathlib
+p = os.getenv("EVIDENTLY_WORKSPACE_PATH")
+print("🔎 EVIDENTLY_WORKSPACE_PATH vu par Python:", p)
+print("   Existe ? ", pathlib.Path(p).exists() if p else None)
+PY
+'''
+      }
+    }
+
+    stage('Rapport_Evidently') {
+      steps {
+        echo '🚀 Exécution de run_evidently_1.py'
+        sh '''set -e
+. "${VENV_PATH}/bin/activate"
+
+# On s'assure que l'env Jenkins prime sur le .env (au cas où load_dotenv(override=True) serait utilisé)
+EVIDENTLY_WORKSPACE_PATH="${EVIDENTLY_WORKSPACE_PATH}" \
+PYTHONPATH="${PYTHONPATH}" \
+ENV_FILE="${ENV_FILE}" \
+python "${WORKSPACE_DIR}/scripts/etl/run_evidently_1.py"
+
+echo "📁 Contenu du workspace Evidently :"
+ls -lah "${EVIDENTLY_WORKSPACE_PATH}" || true
+'''
+      }
+      post {
+        success { echo "✅ OK: Rapport Success" }
+        failure { echo "❌ KO: Rapport Echec" }
+      }
+    }
+
+
+  }
+
+   post {
+    always {
+      // Liste avec chemin absolu (pas relatif)
+      sh 'ls -lah "$EVIDENTLY_WORKSPACE_PATH" || true'
+    }
+    success { echo '✅ Pipeline OK' }
+    failure { echo '⛔ Pipeline KO' }
+  }
+}

@@ -1,0 +1,34 @@
+pandas
+scikit-learn
+mlflow==2.11.1
+joblib
+psycopg2-binary
+requests
+
+kafka-python
+confluent-kafka
+python-dotenv
+openmeteo-requests
+requests-cache
+retry-requests
+numpy
+lightgbm
+
+
+evidently==0.6.7
+
+
+
+# === Outils de test ===
+pytest
+pytest-cov
+pytest-dotenv
+
+# === Outils de qualité de code ===
+flake8         # linting
+black          # formatage auto du code
+isort          # tri des imports
+mypy           # vérification de types
+
+# === Optionnel : outils pour mocker et tester ===
+pytest-mock

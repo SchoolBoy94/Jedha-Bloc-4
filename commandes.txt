@@ -1,0 +1,98 @@
+✔️
+docker compose up -d postgres airflow-webserver airflow-scheduler zookeeper kafka kafka-cli
+
+docker exec -it aqi_postgres psql -U postgres -d aqi
+docker exec -it aqi_postgres psql -U postgres
+
+
+
+\l
+select count(*) from aqi_raw;
+select count(*) from aqi_transform;
+
+"""
+Display Topics List :
+"""
+docker exec -it kafka_cli bash
+kafka-topics.sh --bootstrap-server kafka:9092 --list
+
+
+
+kafka-console-consumer.sh \
+  --bootstrap-server kafka:9092 \
+  --topic aqi_current \
+  --from-beginning
+
+
+
+kafka-console-consumer.sh \
+  --bootstrap-server kafka:9092 \
+  --topic aqi_transformed\
+  --from-beginning
+
+
+kafka-console-consumer.sh --bootstrap-server kafka:9092 --topic aqi_transformed --from-beginning
+
+
+
+
+
+
+
+
+docker exec -it jenkins bash
+cd /var/jenkins_home/workspace && python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements_test.txt
+export ENV_FILE=/var/jenkins_home/workspace/tests/.env_test && pytest -m integration -vv tests/test_create_kafka_topics_integration.py
+
+
+
+
+
+
+
+
+
+
+
+curl -X POST http://localhost:8000/predict \
+  -H "Content-Type: application/json" \
+  -d '{"data": {
+        "pm2_5": 7.2,
+        "pm10": 11.5,
+        "carbon_monoxide": 135.0,
+        "sulphur_dioxide": 0.9,
+        "uv_index": 1.0
+      }}'
+
+
+
+
+
+curl -X POST http://localhost:8000/predict \
+  -H "Content-Type: application/json" \
+  -d '{
+        "data": [
+          {
+            "pm2_5": 8.2,
+            "pm10": 15.4,
+            "carbon_monoxide": 110.0,
+            "sulphur_dioxide": 2.5,
+            "uv_index": 3.0
+          },
+          {
+            "pm2_5": 42.0,
+            "pm10": 70.0,
+            "carbon_monoxide": 180.0,
+            "sulphur_dioxide": 6.3,
+            "uv_index": 7.5
+          },
+          {
+            "pm2_5": 120.0,
+            "pm10": 220.0,
+            "carbon_monoxide": 890.0,
+            "sulphur_dioxide": 45.0,
+            "uv_index": 12.0
+          }
+        ]
+      }'
+

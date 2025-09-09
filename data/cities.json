@@ -1,0 +1,5 @@
+[
+  { "id": 0, "name": "Paris", "lat": 48.8566, "lon": 2.3522 },
+  { "id": 1, "name": "Marseille", "lat": 43.2965, "lon": 5.3698 },
+  { "id": 2, "name": "Lyon", "lat": 45.764, "lon": 4.8357 }
+]

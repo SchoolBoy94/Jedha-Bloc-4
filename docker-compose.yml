@@ -1,0 +1,206 @@
+version: "3.8"
+
+services:
+  # -------------------------
+  # Jenkins
+  # -------------------------
+  jenkins:
+    build:
+      context: .
+      dockerfile: Dockerfile.jenkins
+    container_name: jenkins
+    restart: always
+    user: root
+    ports:
+      - "8081:8080"
+      - "50000:50000"
+    environment:
+      JAVA_OPTS: "-Djenkins.install.runSetupWizard=false"
+    volumes:
+      - jenkins_home:/var/jenkins_home # persistance Jenkins (nommé)
+      - ./pip_cache:/root/.cache/pip # cache pip local (bind)
+      - ./scripts:/var/jenkins_home/workspace/scripts
+      - ./tests:/var/jenkins_home/workspace/tests
+      - ./mlruns:/mlruns # artefacts MLflow (bind)
+      - ./.env:/var/jenkins_home/workspace/.env
+      - ./evidently_workspace:/var/jenkins_home/workspace/evidently_workspace
+      - ./requirements_test.txt:/var/jenkins_home/workspace/requirements_test.txt
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  # -------------------------
+  # Postgres
+  # -------------------------
+  postgres:
+    image: postgres:13
+    container_name: aqi_postgres
+    restart: always
+    env_file: .env
+    environment:
+      POSTGRES_MULTIPLE_DATABASES: ${POSTGRES_MULTIPLE_DATABASES}
+    volumes:
+      - pg_data:/var/lib/postgresql/data # persistance DB (nommé)
+      - ./init/init-multiple-db.sh:/docker-entrypoint-initdb.d/init-multiple-db.sh
+    ports:
+      - "5432:5432"
+
+  # -------------------------
+  # Airflow Webserver
+  # -------------------------
+  airflow-webserver:
+    # image: apache/airflow:2.7.3-python3.9
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    container_name: airflow_webserver
+    restart: always
+    depends_on:
+      - postgres
+    env_file: .env
+    environment:
+      AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY}
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      PYTHONPATH: /opt/airflow
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./scripts:/opt/airflow/scripts
+      # - ./requirements.txt:/requirements.txt
+      - ./data:/opt/airflow/data
+      # - ./reports:/opt/airflow/reports
+      - ./mlruns:/mlruns
+      - ./evidently_workspace:/workspace
+      - ./.env:/opt/airflow/.env
+    ports:
+      - "8080:8080"
+    command: >
+      bash -c "
+               airflow db init &&
+               airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com &&
+               airflow webserver"
+
+  # -------------------------
+  # Airflow Scheduler
+  # -------------------------
+  airflow-scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow # DOIT être basé sur 2.9.3-python3.11
+    container_name: airflow_scheduler
+    restart: always
+    depends_on:
+      - airflow-webserver
+    env_file: .env
+    environment:
+      AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY}
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/airflow
+      PYTHONPATH: /opt/airflow
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./scripts:/opt/airflow/scripts
+      - ./data:/opt/airflow/data
+      - ./mlruns:/mlruns
+      - ./.env:/opt/airflow/.env
+      - ./evidently_workspace:/workspace
+    command: >
+      bash -c "airflow scheduler"
+
+  # -------------------------
+  # Zookeeper & Kafka
+  # -------------------------
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.4.0
+    container_name: zookeeper
+    restart: always
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+
+  kafka:
+    image: confluentinc/cp-kafka:7.4.0
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    restart: always
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: "zookeeper:2181"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_LOG_RETENTION_HOURS: 168
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+
+  kafka-cli:
+    image: bitnami/kafka:latest
+    container_name: kafka_cli
+    depends_on:
+      - kafka
+    entrypoint: /bin/bash
+    tty: true
+
+  # -------------------------
+  # MLflow
+  # -------------------------
+  mlflow:
+    build:
+      context: .
+      dockerfile: Dockerfile.mlflow
+    container_name: mlflow
+    restart: always
+    env_file: .env
+    environment:
+      BACKEND_STORE_URI: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/mlflow
+      ARTIFACT_ROOT: /mlruns
+    volumes:
+      - ./mlruns:/mlruns
+    ports:
+      - "5000:5000"
+    depends_on:
+      - postgres
+    command: >
+      mlflow server
+      --backend-store-uri postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/mlflow
+      --serve-artifacts
+      --artifacts-destination /mlruns
+      --host 0.0.0.0
+      --port 5000
+
+  # -------------------------
+  # FastAPI (inférence)
+  # -------------------------
+  api_aqi:
+    build:
+      context: .
+      dockerfile: Dockerfile.fastapi
+    container_name: fastapi
+    restart: always
+    env_file: .env
+    environment:
+      AQI_MODEL_NAME: lgbm_european_aqi
+      AQI_MODEL_STAGE: Production
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      PYTHONPATH: /opt/airflow
+    depends_on:
+      - postgres
+      - mlflow
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app
+      - ./mlruns:/mlruns
+      - ./scripts:/opt/airflow/scripts
+      - ./data:/data
+      - ./.env:/app/.env
+
+volumes:
+  pg_data:
+  jenkins_home:

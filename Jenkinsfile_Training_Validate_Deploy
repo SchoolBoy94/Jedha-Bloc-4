@@ -1,0 +1,106 @@
+pipeline {
+  agent any
+
+  triggers {
+    cron('0 0 * * 0')  // minuit chaque dimanche (début de semaine)
+  }
+
+  environment {
+    WORKSPACE_DIR = '/var/jenkins_home/workspace'
+    VENV_DIR      = '.venv'
+    VENV_PATH     = "${WORKSPACE_DIR}/${VENV_DIR}"
+    PYTHONPATH    = "${WORKSPACE_DIR}"
+    ENV_FILE      = "${WORKSPACE_DIR}/.env"
+    FASTAPI_URL = 'http://fastapi:8000'
+  }
+
+  stages {
+    stage('Setup Python venv') {
+      steps {
+        echo '🔧 Création du venv + install deps'
+        sh '''set -e
+python3 -m venv "${VENV_PATH}"
+. "${VENV_PATH}/bin/activate"
+python -V
+python -m pip install --upgrade pip
+python -m pip install -r "${WORKSPACE_DIR}/requirements_test.txt"
+'''
+      }
+    }
+
+    stage('Check Installed Packages') {
+      steps {
+        echo "📦 Vérification des libs"
+        sh '''set -e
+. "${VENV_PATH}/bin/activate"
+python -m pip show numpy || echo "❌ numpy non trouvé"
+python -m pip list | grep numpy || true
+'''
+      }
+    }
+
+    stage('Train_AQI') {
+      steps {
+        echo '🚀 Exécution de train_aqi_fine_tuning.py'
+        sh '''set -e
+. "${VENV_PATH}/bin/activate"
+export PYTHONPATH="${PYTHONPATH}"
+export ENV_FILE="${ENV_FILE}"
+cd ${WORKSPACE_DIR}
+python scripts/model/train_aqi_fine_tuning.py
+'''
+      }
+      post {
+        success { echo "✅ OK: Training Avec Success" }
+        failure { echo "❌ KO: Training Avec Echec" }
+      }
+    }
+
+
+    stage('Evaluate_Validate') {
+      steps {
+        echo '🚀 Exécution de validate_and_promote_aqi.py'
+        sh '''set -e
+. "${VENV_PATH}/bin/activate"
+export PYTHONPATH="${PYTHONPATH}"
+export ENV_FILE="${ENV_FILE}"
+cd ${WORKSPACE_DIR}
+python scripts/model/validate_and_promote_aqi.py
+'''
+      }
+      post {
+        success { echo "✅ OK: Promotion Avec Success" }
+        failure { echo "❌ KO: Promotion Avec Echec" }
+      }
+    }
+
+  
+
+stage('Deploy') {
+  steps {
+    sh '''
+      set -e
+      for i in $(seq 1 30); do
+        if curl -sSf --max-time 3 http://fastapi:8000/health >/dev/null; then break; fi
+        echo "⏳ FastAPI pas encore prêt (${i}/30)…"; sleep 2
+      done
+      curl -sSf --max-time 10 http://fastapi:8000/reload >/dev/null
+      sleep 2
+      curl -sSf --max-time 10 http://fastapi:8000/health >/dev/null
+      echo "✅ Reload OK"
+    '''
+  }
+}
+
+
+
+
+
+
+
+  }
+  post {
+    success { echo '✅ Pipeline OK' }
+    failure { echo '⛔ Pipeline KO' }
+  }
+}
